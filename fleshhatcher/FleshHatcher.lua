@@ -378,8 +378,7 @@ while API.Read_LoopyLoop() do
     else
         runKillCycle()
     end
-
-    collectgarbage("collect")
+    
     API.RandomSleep2(100, 200, 400)
 end
 
