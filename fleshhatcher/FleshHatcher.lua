@@ -18,6 +18,11 @@ local Config = {
     EMERGENCY_HP = 20,
     ADREN_CRYSTAL = 114749,
     INSTANCE_EXPIRY_VARBIT = 9925,
+    AOE_3X3      = 8279,
+    AOE_OUTER    = 8916,
+    AOE_MIDDLE   = 8919,
+    AOE_INNER    = 8918,
+    ARENA_SIZE   = 15,
 }
 
 local Stats = {
@@ -264,6 +269,156 @@ function Boss:findAlive()
     return nil
 end
 
+
+local Mechanics = {}
+Mechanics.lastDodgeTick = 0
+
+function Mechanics:getCoordsFromObjects(allObjects, objType, objId)
+    local coords = {}
+    for _, obj in ipairs(allObjects) do
+        if obj.Type == objType and obj.Id == objId and obj.Tile_XYZ then
+            coords[#coords + 1] = obj.Tile_XYZ
+        end
+    end
+    if #coords > 0 then return coords end
+    return nil
+end
+
+function Mechanics:isPlayerInDanger(dangerTiles, radius)
+    if not dangerTiles then return false end
+    local playerPos = API.PlayerCoord()
+    for _, tile in ipairs(dangerTiles) do
+        if math.abs(playerPos.x - tile.x) + math.abs(playerPos.y - tile.y) <= radius then
+            return true
+        end
+    end
+    return false
+end
+
+function Mechanics:getBossPos()
+    local npcs = API.GetAllObjArrayInteract({Config.BOSS_ID}, 50, {1})
+    for _, npc in ipairs(npcs) do
+        if npc.Id == Config.BOSS_ID and npc.Tile_XYZ then
+            return npc.Tile_XYZ
+        end
+    end
+    return nil
+end
+
+function Mechanics:moveToTile(tile)
+    local currentTick = API.Get_tick()
+    if currentTick - self.lastDodgeTick < 4 then return false end
+
+    local dive = API.GetABs_name("Dive", true)
+    if dive.enabled and dive.cooldown_timer <= 0 then
+        API.DoAction_Dive_Tile(WPOINT.new(tile.x, tile.y, 0))
+        self.lastDodgeTick = currentTick
+        return true
+    end
+
+    API.DoAction_Tile(WPOINT.new(tile.x, tile.y, 0))
+    self.lastDodgeTick = currentTick
+    return true
+end
+
+function Mechanics:avoidAOE(dangerTiles, radius)
+    local currentTick = API.Get_tick()
+    if currentTick - self.lastDodgeTick < 4 then return false end
+    if not dangerTiles then return false end
+
+    local freeTiles = API.Math_FreeTiles(dangerTiles, radius, Config.ARENA_SIZE, {})
+    if not freeTiles or #freeTiles == 0 then return false end
+
+    return self:moveToTile(freeTiles[1])
+end
+
+function Mechanics:moveTowardBoss(bossPos, distance)
+    local currentTick = API.Get_tick()
+    if currentTick - self.lastDodgeTick < 4 then return false end
+    if not bossPos then return false end
+
+    local playerPos = API.PlayerCoord()
+    local dx = bossPos.x - playerPos.x
+    local dy = bossPos.y - playerPos.y
+    local dist = math.sqrt(dx * dx + dy * dy)
+
+    if dist < 1 then return false end
+
+    local nx = dx / dist
+    local ny = dy / dist
+    local targetX = math.floor(playerPos.x + nx * distance)
+    local targetY = math.floor(playerPos.y + ny * distance)
+
+    return self:moveToTile({x = targetX, y = targetY, z = 0})
+end
+
+function Mechanics:moveAwayFromBoss(bossPos, distance)
+    local currentTick = API.Get_tick()
+    if currentTick - self.lastDodgeTick < 4 then return false end
+    if not bossPos then return false end
+
+    local playerPos = API.PlayerCoord()
+    local dx = playerPos.x - bossPos.x
+    local dy = playerPos.y - bossPos.y
+    local dist = math.sqrt(dx * dx + dy * dy)
+
+    if dist < 1 then
+        dx, dy = 1, 0
+        dist = 1
+    end
+
+    local nx = dx / dist
+    local ny = dy / dist
+    local targetX = math.floor(playerPos.x + nx * distance)
+    local targetY = math.floor(playerPos.y + ny * distance)
+
+    return self:moveToTile({x = targetX, y = targetY, z = 0})
+end
+
+function Mechanics:handleMechanics()
+    local allObjects = API.ReadAllObjectsArray({4}, {-1}, {})
+    if not allObjects or #allObjects == 0 then return false end
+
+    local aoe3x3  = self:getCoordsFromObjects(allObjects, 4, Config.AOE_3X3)
+    local outer    = self:getCoordsFromObjects(allObjects, 4, Config.AOE_OUTER)
+    local middle   = self:getCoordsFromObjects(allObjects, 4, Config.AOE_MIDDLE)
+    local inner    = self:getCoordsFromObjects(allObjects, 4, Config.AOE_INNER)
+
+    local bossPos = self:getBossPos()
+
+    -- 3x3 telegraph: dodge to nearest free tile
+    if aoe3x3 and self:isPlayerInDanger(aoe3x3, 2) then
+        return self:avoidAOE(aoe3x3, 2)
+    end
+
+    -- Outer telegraph: move toward boss (closer to center)
+    if outer and self:isPlayerInDanger(outer, 3) then
+        return self:moveTowardBoss(bossPos, 5)
+    end
+
+    -- Middle telegraph: move toward boss if close, or use free tiles
+    if middle and self:isPlayerInDanger(middle, 2) then
+        if bossPos then
+            local playerPos = API.PlayerCoord()
+            local distToBoss = math.abs(playerPos.x - bossPos.x) + math.abs(playerPos.y - bossPos.y)
+            -- If we're closer to boss, move toward it; otherwise move outward
+            if distToBoss <= 7 then
+                return self:moveTowardBoss(bossPos, 3)
+            else
+                return self:moveAwayFromBoss(bossPos, 5)
+            end
+        end
+        return self:avoidAOE(middle, 2)
+    end
+
+    -- Inner telegraph: move away from boss (outward)
+    if inner and self:isPlayerInDanger(inner, 2) then
+        return self:moveAwayFromBoss(bossPos, 6)
+    end
+
+    return false
+end
+
 function Boss:loot()
     Stats.currentState = "Looting"
 
@@ -302,26 +457,35 @@ function Boss:fight()
         if Utils:emergencyCheck() then return false end
         if os.time() - fightStart > Config.MAX_FIGHT then return false end
 
-        local boss = self:findAlive()
-
-        if hasAttacked and boss and boss.Anim == Config.DEATH_ANIM then
-            local killDuration = os.time() - Stats.killStartTime
-            Stats.kills = Stats.kills + 1
-            Stats.killTimes[#Stats.killTimes + 1] = killDuration
-            Stats.killStartTime = 0
-
-            API.RandomSleep2(4000, 800, 1200)
-            self:loot()
-            return true
-        end
-
-        if boss and not hasAttacked then
+        -- Handle mechanics first (highest priority)
+        if Mechanics:handleMechanics() then
+            API.RandomSleep2(600, 100, 200)
+            -- Re-attack after dodging
             API.DoAction_NPC(0x29, API.OFF_ACT_AttackNPC_route, {Config.BOSS_ID}, 50)
-            API.RandomSleep2(1500, 300, 500)
-            hasAttacked = true
+            API.RandomSleep2(600, 100, 200)
+        else
+            local boss = self:findAlive()
+
+            if hasAttacked and boss and boss.Anim == Config.DEATH_ANIM then
+                local killDuration = os.time() - Stats.killStartTime
+                Stats.kills = Stats.kills + 1
+                Stats.killTimes[#Stats.killTimes + 1] = killDuration
+                Stats.killStartTime = 0
+
+                API.RandomSleep2(4000, 800, 1200)
+                self:loot()
+                return true
+            end
+
+            if boss and not hasAttacked then
+                API.DoAction_NPC(0x29, API.OFF_ACT_AttackNPC_route, {Config.BOSS_ID}, 50)
+                API.RandomSleep2(1500, 300, 500)
+                hasAttacked = true
+            end
+
+            Utils:antiIdle()
         end
 
-        Utils:antiIdle()
         API.RandomSleep2(600, 100, 200)
     end
 
