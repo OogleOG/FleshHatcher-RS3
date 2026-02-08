@@ -167,6 +167,11 @@ function WarsRetreat:bank()
     end
 
     API.RandomSleep2(3500, 500, 800)
+
+    while API.Read_LoopyLoop() and API.GetHPrecent() < 100 do
+        API.RandomSleep2(600, 100, 200)
+    end
+
     return true
 end
 
