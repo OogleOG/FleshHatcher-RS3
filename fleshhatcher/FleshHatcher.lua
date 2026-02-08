@@ -113,11 +113,11 @@ function Utils:activateCurse()
     local ruination = API.GetABs_name("Ruination", true)
 
     if sorrow.enabled then
-        API.DoAction_Ability_Direct(sorrow, 1, API.OFF_ACT_GeneralInterface_route)
+        API.DoAction_Ability("Sorrow", 1, API.OFF_ACT_GeneralInterface_route)
         API.RandomSleep2(600, 200, 400)
         return true
     elseif ruination.enabled then
-        API.DoAction_Ability_Direct(ruination, 1, API.OFF_ACT_GeneralInterface_route)
+        API.DoAction_Ability("Ruination", 1, API.OFF_ACT_GeneralInterface_route)
         API.RandomSleep2(600, 200, 400)
         return true
     end
@@ -131,10 +131,10 @@ function Utils:deactivateCurse()
     local ruination = API.GetABs_name("Ruination", true)
 
     if sorrow.enabled then
-        API.DoAction_Ability_Direct(sorrow, 1, API.OFF_ACT_GeneralInterface_route)
+        API.DoAction_Ability("Sorrow", 1, API.OFF_ACT_GeneralInterface_route)
         API.RandomSleep2(600, 200, 400)
     elseif ruination.enabled then
-        API.DoAction_Ability_Direct(ruination, 1, API.OFF_ACT_GeneralInterface_route)
+        API.DoAction_Ability("Ruination", 1, API.OFF_ACT_GeneralInterface_route)
         API.RandomSleep2(600, 200, 400)
     end
 end
@@ -246,7 +246,7 @@ function Boss:navigate()
     end
 
     API.DoAction_Object1(0x29, API.OFF_ACT_GeneralObject_route0, {Config.LEDGE}, 50)
-    API.RandomSleep2(2000, 1400, 2200)
+    API.RandomSleep2(2600, 1800, 2800)
 
     Utils:togglePrayer(35)
     Utils:activateCurse()
