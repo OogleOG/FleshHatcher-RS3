@@ -1,25 +1,46 @@
-🩸 Flesh-hatcher Mhekarnahz Killer v3.0
-Automates Flesh-hatcher Mhekarnahz boss kills from War's Retreat.
+# FleshHatcher
 
-#Features
-Full kill loop: Bank → Altar → Adrenaline Crystal → Portal → Instance → Fight → Loot → Repeat
-Mechanic dodging (3x3 telegraphs, inner/middle/outer ring attacks)
-Dive/walk avoidance with auto re-engage
-Auto prayer & curse activation (Sorrow/Ruination)
-Surge navigation for faster instance entry
-Skips altar/adrenaline if already full
-Waits for full HP after banking before continuing
-Instance expiry detection
-Live GUI with HP/Prayer/Adrenaline bars, boss health, kill stats, kill times & warnings
+Fully automated Flesh Hatcher boss killer script. Handles the entire kill loop from banking to looting with full mechanic avoidance.
 
-#Recommended Setup
-Soul Split + Sorrow or Ruination on ability bar
-Surge on ability bar (optional, speeds up navigation)
-Dive on ability bar (optional, improves mechanic dodging)
-War's Retreat Teleport on ability bar
-Bank preset with your gear ready as last loaded preset
-Boss portal configured for Flesh-hatcher Mhekarnahz
+## Features
 
-#How to Use
-Start at War's Retreat
-Hit Start — it handles everything from there
+- **Full Kill Loop** — Banks, restores prayer & adrenaline, enters instance, navigates to the boss, fights, loots, and repeats
+- **Mechanic Dodging** — Automatically detects and avoids all telegraph attacks:
+  - 3x3 Square Telegraphs
+  - Outer Ring Telegraphs
+  - Middle Ring Telegraphs
+  - Inner Ring Telegraphs
+  - Uses Dive when available, walks out when on cooldown
+- **Smart Banking** — Loads last preset and waits for full HP restoration before continuing
+- **Prayer Management** — Only uses the Altar of War when prayer is below max
+- **Adrenaline Crystal** — Surges to and interacts with the adrenaline crystal, waits until 100% before entering
+- **Curse Activation** — Automatically activates Sorrow or Ruination before each fight
+- **Instance Management** — Detects expired instances and starts fresh when needed
+- **Emergency Teleport** — Teleports out if HP drops below emergency threshold
+- **War's Retreat Integration** — Optionally starts from War's Retreat and teleports between kills
+
+## Setup
+
+1. Have your preset saved as your **last preset** at the bank chest in War's Retreat
+2. Ensure you have **Sorrow** or **Ruination** curse available
+3. Make sure **Dive** and **Surge** are on your action bar
+4. Start the script at War's Retreat (recommended) or at the boss entrance
+
+## Configuration
+
+| Option | Description |
+|--------|-------------|
+| **Start at War's Retreat** | Toggle whether to begin the loop from War's Retreat |
+| **Teleport Between Kills** | Toggle whether to teleport back to War's Retreat between kills |
+
+## Requirements
+
+- Access to the Flesh Hatcher boss
+- War's Retreat unlocked
+- Dive & Surge abilities
+- Sorrow or Ruination curse
+- A combat preset saved as last preset
+
+## Feedback
+
+Feel free to drop any feedback or bug reports!
