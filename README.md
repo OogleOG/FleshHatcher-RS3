@@ -1,5 +1,8 @@
 # FleshHatcher
 
+<img width="686" height="386" alt="image" src="https://github.com/user-attachments/assets/20d5570d-74d9-4530-87e0-93a624cc0f54" />
+
+
 Fully automated Flesh Hatcher boss killer script. Handles the entire kill loop from banking to looting with full mechanic avoidance.
 
 ## Features
