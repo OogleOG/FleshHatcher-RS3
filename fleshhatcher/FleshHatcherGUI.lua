@@ -27,10 +27,7 @@ FleshHatcherGUI.selectWarningsTab = false
 FleshHatcherGUI.config = {
     startAtWars = true,
     teleportBetweenKills = false,
-    bankMethod = 0, -- 0 = LOAD_LAST, 1 = OPEN_AND_PRESET
 }
-
-local BANK_METHODS = { "Load Last Preset", "Open & Preset 1" }
 
 ------------------------------------------
 --# CRIMSON THEME COLORS
@@ -81,7 +78,6 @@ local function saveConfigToFile(cfg)
     local data = {
         StartAtWars = cfg.startAtWars,
         TeleportBetweenKills = cfg.teleportBetweenKills,
-        BankMethod = cfg.bankMethod,
     }
     local ok, json = pcall(API.JsonEncode, data)
     if not ok or not json then
@@ -122,7 +118,6 @@ function FleshHatcherGUI.loadConfig()
     local c = FleshHatcherGUI.config
     if type(saved.StartAtWars) == "boolean" then c.startAtWars = saved.StartAtWars end
     if type(saved.TeleportBetweenKills) == "boolean" then c.teleportBetweenKills = saved.TeleportBetweenKills end
-    if type(saved.BankMethod) == "number" then c.bankMethod = saved.BankMethod end
 end
 
 function FleshHatcherGUI.getConfig()
@@ -130,7 +125,6 @@ function FleshHatcherGUI.getConfig()
     return {
         startAtWars = c.startAtWars,
         teleportBetweenKills = c.teleportBetweenKills,
-        bankMethod = c.bankMethod == 0 and "LOAD_LAST" or "OPEN_AND_PRESET",
     }
 end
 
@@ -184,12 +178,6 @@ local function progressBar(progress, height, text, r, g, b)
     ImGui.PopStyleColor(2)
 end
 
-local function label(text)
-    ImGui.PushStyleColor(ImGuiCol.Text, 0.9, 0.9, 0.9, 1.0)
-    ImGui.TextWrapped(text)
-    ImGui.PopStyleColor(1)
-end
-
 local function sectionHeader(text)
     ImGui.PushStyleColor(ImGuiCol.Text, CRIMSON.glow[1], CRIMSON.glow[2], CRIMSON.glow[3], 1.0)
     ImGui.TextWrapped(text)
@@ -237,7 +225,6 @@ local function drawConfigTab(cfg, gui)
             ImGui.TableSetupColumn("lbl", ImGuiTableColumnFlags.WidthStretch, 0.4)
             ImGui.TableSetupColumn("val", ImGuiTableColumnFlags.WidthStretch, 0.6)
             row("Start at War's", cfg.startAtWars and "Yes" or "No")
-            row("Bank Method", BANK_METHODS[cfg.bankMethod + 1])
             row("Teleport Between", cfg.teleportBetweenKills and "Yes" or "No")
             ImGui.EndTable()
         end
@@ -291,19 +278,6 @@ local function drawConfigTab(cfg, gui)
 
     local teleChanged, teleVal = ImGui.Checkbox("Teleport Between Kills##telebetween", cfg.teleportBetweenKills)
     if teleChanged then cfg.teleportBetweenKills = teleVal end
-
-    ImGui.Spacing()
-    ImGui.Separator()
-    ImGui.Spacing()
-
-    -- === BANKING ===
-    sectionHeader("Banking")
-    flavorText("How to load your gear preset.")
-    ImGui.Spacing()
-
-    label("Bank Method")
-    local bankChanged, bankVal = ImGui.Combo("##bankmethod", cfg.bankMethod, BANK_METHODS, 2)
-    if bankChanged then cfg.bankMethod = bankVal end
 
     ImGui.PopItemWidth()
 

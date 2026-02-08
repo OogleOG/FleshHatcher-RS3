@@ -16,6 +16,8 @@ local Config = {
     DEATH_ANIM   = 37206,
     MAX_FIGHT    = 300,
     EMERGENCY_HP = 20,
+    ADREN_CRYSTAL = 114749,
+    INSTANCE_EXPIRY_VARBIT = 9925,
 }
 
 local Stats = {
@@ -165,9 +167,35 @@ end
 
 function WarsRetreat:altar()
     if not API.Read_LoopyLoop() then return false end
+    if API.GetPrayPrecent() >= 100 then return true end
+
     Stats.currentState = "Altar"
     API.DoAction_Object1(0x3d, API.OFF_ACT_GeneralObject_route0, {Config.ALTAR}, 50)
     API.RandomSleep2(3500, 500, 800)
+    return true
+end
+
+function WarsRetreat:adrenalineCrystal()
+    if not API.Read_LoopyLoop() then return false end
+    if tonumber(API.GetAdrenalineFromInterface()) >= 100 then return true end
+
+    Stats.currentState = "Adrenaline Crystal"
+    API.DoAction_Object1(0x29, API.OFF_ACT_GeneralObject_route0, {Config.ADREN_CRYSTAL}, 50)
+    API.RandomSleep2(2900, 100, 100)
+
+    local surge = API.GetABs_name("Surge", true)
+    if surge.enabled and surge.cooldown_timer <= 0 then
+        API.DoAction_Ability("Surge", 1, API.OFF_ACT_GeneralInterface_route)
+        API.RandomSleep2(100, 50, 50)
+    end
+
+    API.DoAction_Object1(0x29, API.OFF_ACT_GeneralObject_route0, {Config.ADREN_CRYSTAL}, 50)
+    API.RandomSleep2(1200, 50, 50)
+
+    while API.Read_LoopyLoop() and tonumber(API.GetAdrenalineFromInterface()) < 100 do
+        API.RandomSleep2(600, 100, 200)
+    end
+
     return true
 end
 
@@ -192,8 +220,17 @@ function Boss:enterInstance()
     API.KeyboardPress2(0x32, 150, 200)
     API.RandomSleep2(1200, 600, 900)
 
-    API.DoAction_Interface(0x24, 0xffffffff, 1, 1591, 60, -1, API.OFF_ACT_GeneralInterface_route)
-    API.RandomSleep2(1800, 800, 1200)
+    if not API.GetInterfaceOpenBySize(1591) then
+        API.RandomSleep2(1500, 600, 900)
+    end
+
+    if API.GetInterfaceOpenBySize(1591) then
+        API.DoAction_Interface(0x24, 0xffffffff, 1, 1591, 60, -1, API.OFF_ACT_GeneralInterface_route)
+        API.RandomSleep2(1800, 800, 1200)
+    else
+        GUI.addWarning("Instance interface did not open")
+        return false
+    end
 
     return true
 end
@@ -203,8 +240,10 @@ function Boss:navigate()
     Stats.currentState = "Navigating"
 
     local surge = API.GetABs_name("Surge", true)
-    API.DoAction_Ability_Direct(surge, 1, API.OFF_ACT_GeneralInterface_route)
-    API.RandomSleep2(0, 400, 600)
+    if surge.enabled and surge.cooldown_timer <= 0 then
+        API.DoAction_Ability("Surge", 1, API.OFF_ACT_GeneralInterface_route)
+        API.RandomSleep2(0, 400, 600)
+    end
 
     API.DoAction_Object1(0x29, API.OFF_ACT_GeneralObject_route0, {Config.LEDGE}, 50)
     API.RandomSleep2(2000, 1400, 2200)
@@ -314,7 +353,6 @@ local function applyGUIConfig()
     local cfg = GUI.getConfig()
     Config.START_AT_WARS = cfg.startAtWars
     Config.TELEPORT_BETWEEN_KILLS = cfg.teleportBetweenKills
-    Config.BANK_METHOD = cfg.bankMethod
 end
 
 local function startLiveGUI()
@@ -333,6 +371,7 @@ local function runKillCycle()
     end
 
     WarsRetreat:altar()
+    WarsRetreat:adrenalineCrystal()
 
     if not WarsRetreat:enterPortal() then
         GUI.addWarning("Failed to enter portal")
