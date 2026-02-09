@@ -23,6 +23,14 @@ local Config = {
     AOE_MIDDLE   = 8919,
     AOE_INNER    = 8918,
     ARENA_SIZE   = 15,
+    RETURN_PORTAL = 134748,
+    PRAYER_POTION_IDS = {2434, 2436, 2438, 2440, 179, 181, 183, 185},
+    SUPER_RESTORE_IDS = {3024, 3026, 3028, 3030, 23399, 23401, 23403, 23405},
+    PRAYER_DRINK_THRESHOLD = 40,
+    PRAYER_EMERGENCY_THRESHOLD = 10,
+    SOULSPLIT_BUFF = 26033,
+    RUINATION_BUFF = 30769,
+    SORROW_BUFF   = 30771,
 }
 
 local Stats = {
@@ -108,12 +116,58 @@ function Utils:emergencyCheck()
     return false
 end
 
+function Utils:isSoulsplitActive()
+    return API.Buffbar_GetIDstatus(Config.SOULSPLIT_BUFF, false).id > 0
+end
+
+function Utils:isCurseActive()
+    return API.Buffbar_GetIDstatus(Config.RUINATION_BUFF, false).id > 0
+        or API.Buffbar_GetIDstatus(Config.SORROW_BUFF, false).id > 0
+end
+
 function Utils:togglePrayer(prayerId)
     API.DoAction_Interface(0xffffffff, 0xffffffff, 1, 1458, 40, prayerId, API.OFF_ACT_GeneralInterface_route)
     API.RandomSleep2(600, 200, 400)
 end
 
+function Utils:hasPrayerPots()
+    return Inventory:ContainsAny(Config.SUPER_RESTORE_IDS) or Inventory:ContainsAny(Config.PRAYER_POTION_IDS)
+end
+
+function Utils:drinkPrayerPot()
+    if Inventory:ContainsAny(Config.SUPER_RESTORE_IDS) then
+        API.DoAction_Inventory2(Config.SUPER_RESTORE_IDS, 0, 1, API.OFF_ACT_GeneralInterface_route)
+        API.RandomSleep2(600, 200, 300)
+        return true
+    elseif Inventory:ContainsAny(Config.PRAYER_POTION_IDS) then
+        API.DoAction_Inventory2(Config.PRAYER_POTION_IDS, 0, 1, API.OFF_ACT_GeneralInterface_route)
+        API.RandomSleep2(600, 200, 300)
+        return true
+    end
+    return false
+end
+
+function Utils:managePrayer()
+    local prayPct = API.GetPrayPrecent()
+    if prayPct <= Config.PRAYER_EMERGENCY_THRESHOLD then
+        if not self:hasPrayerPots() then
+            GUI.addWarning("Out of prayer potions and prayer critically low!")
+            return "emergency"
+        end
+        self:drinkPrayerPot()
+        return "drank"
+    elseif prayPct <= Config.PRAYER_DRINK_THRESHOLD then
+        if self:hasPrayerPots() then
+            self:drinkPrayerPot()
+            return "drank"
+        end
+    end
+    return "ok"
+end
+
 function Utils:activateCurse()
+    if self:isCurseActive() then return true end
+
     local sorrow = API.GetABs_name("Sorrow", true)
     local ruination = API.GetABs_name("Ruination", true)
 
@@ -132,6 +186,8 @@ function Utils:activateCurse()
 end
 
 function Utils:deactivateCurse()
+    if not self:isCurseActive() then return end
+
     local sorrow = API.GetABs_name("Sorrow", true)
     local ruination = API.GetABs_name("Ruination", true)
 
@@ -150,6 +206,12 @@ local WarsRetreat = {}
 function WarsRetreat:teleport()
     if not API.Read_LoopyLoop() then return false end
     Stats.currentState = "Teleporting"
+
+    if Utils:isSoulsplitActive() then
+        Utils:togglePrayer(35)
+    end
+    Utils:deactivateCurse()
+
     API.DoAction_Ability("War's Retreat Teleport", 1, API.OFF_ACT_GeneralInterface_route)
     API.RandomSleep2(3000, 1200, 1800)
     return true
@@ -213,8 +275,22 @@ function WarsRetreat:enterPortal()
     if not API.Read_LoopyLoop() then return false end
     Stats.currentState = "Entering Portal"
     API.DoAction_Object1(0x39, API.OFF_ACT_GeneralObject_route0, {Config.BOSS_PORTAL}, 50)
-    API.RandomSleep2(11000, 1000, 1500)
-    return true
+    API.RandomSleep2(2000, 500, 800)
+
+    local timeout = os.time() + 30
+    while API.Read_LoopyLoop() and os.time() < timeout do
+        local objs = API.GetAllObjArrayInteract({Config.ENTRANCE}, 50, {0})
+        for _, obj in ipairs(objs) do
+            if obj.Id == Config.ENTRANCE then
+                API.RandomSleep2(600, 200, 400)
+                return true
+            end
+        end
+        API.RandomSleep2(600, 100, 200)
+    end
+
+    GUI.addWarning("Timed out waiting for boss entrance")
+    return false
 end
 
 
@@ -251,14 +327,32 @@ function Boss:navigate()
 
     local surge = API.GetABs_name("Surge", true)
     if surge.enabled and surge.cooldown_timer <= 0 then
-        API.DoAction_Ability("Surge", 1, API.OFF_ACT_GeneralInterface_route)
-        API.RandomSleep2(0, 400, 600)
+        local playerPos = API.PlayerCoord()
+        local ledges = API.GetAllObjArrayInteract({Config.LEDGE}, 50, {0})
+        local shouldSurge = true
+        for _, obj in ipairs(ledges) do
+            if obj.Id == Config.LEDGE and obj.Tile_XYZ then
+                local dx = playerPos.x - obj.Tile_XYZ.x
+                local dy = playerPos.y - obj.Tile_XYZ.y
+                local dist = math.sqrt(dx * dx + dy * dy)
+                if dist <= 5 then
+                    shouldSurge = false
+                end
+                break
+            end
+        end
+        if shouldSurge then
+            API.DoAction_Ability("Surge", 1, API.OFF_ACT_GeneralInterface_route)
+            API.RandomSleep2(0, 400, 600)
+        end
     end
 
     API.DoAction_Object1(0x29, API.OFF_ACT_GeneralObject_route0, {Config.LEDGE}, 50)
     API.RandomSleep2(2600, 1800, 2800)
 
-    Utils:togglePrayer(35)
+    if not Utils:isSoulsplitActive() then
+        Utils:togglePrayer(35)
+    end
     Utils:activateCurse()
 
     return true
@@ -389,36 +483,24 @@ function Mechanics:handleMechanics()
     local middle   = self:getCoordsFromObjects(allObjects, 4, Config.AOE_MIDDLE)
     local inner    = self:getCoordsFromObjects(allObjects, 4, Config.AOE_INNER)
 
-    local bossPos = self:getBossPos()
-
-    -- 3x3 telegraph: dodge to nearest free tile
+    -- 3x3 telegraph
     if aoe3x3 and self:isPlayerInDanger(aoe3x3, 2) then
         return self:avoidAOE(aoe3x3, 2)
     end
 
-    -- Outer telegraph: move toward boss (closer to center)
+    -- Outer telegraph
     if outer and self:isPlayerInDanger(outer, 3) then
-        return self:moveTowardBoss(bossPos, 5)
+        return self:avoidAOE(outer, 3)
     end
 
-    -- Middle telegraph: move toward boss if close, or use free tiles
+    -- Middle telegraph
     if middle and self:isPlayerInDanger(middle, 2) then
-        if bossPos then
-            local playerPos = API.PlayerCoord()
-            local distToBoss = math.abs(playerPos.x - bossPos.x) + math.abs(playerPos.y - bossPos.y)
-            -- If we're closer to boss, move toward it; otherwise move outward
-            if distToBoss <= 7 then
-                return self:moveTowardBoss(bossPos, 3)
-            else
-                return self:moveAwayFromBoss(bossPos, 5)
-            end
-        end
         return self:avoidAOE(middle, 2)
     end
 
-    -- Inner telegraph: move away from boss (outward)
+    -- Inner telegraph
     if inner and self:isPlayerInDanger(inner, 2) then
-        return self:moveAwayFromBoss(bossPos, 6)
+        return self:avoidAOE(inner, 2)
     end
 
     return false
@@ -427,7 +509,9 @@ end
 function Boss:loot()
     Stats.currentState = "Looting"
 
-    Utils:togglePrayer(35)
+    if Utils:isSoulsplitActive() then
+        Utils:togglePrayer(35)
+    end
     Utils:deactivateCurse()
 
     API.RandomSleep2(0, 400, 800)
@@ -446,21 +530,29 @@ function Boss:loot()
 end
 
 function Boss:fight()
-    if not API.Read_LoopyLoop() then return false end
+    if not API.Read_LoopyLoop() then return "emergency" end
     Stats.currentState = "Fighting"
     Stats.killStartTime = os.time()
 
     local fightStart = os.time()
 
     while API.Read_LoopyLoop() do
-        if GUI.isStopped() then return false end
+        if GUI.isStopped() then return "emergency" end
 
         while GUI.isPaused() and API.Read_LoopyLoop() do
             API.RandomSleep2(200, 50, 100)
         end
 
-        if Utils:emergencyCheck() then return false end
-        if os.time() - fightStart > Config.MAX_FIGHT then return false end
+        if Utils:emergencyCheck() then return "emergency" end
+        if os.time() - fightStart > Config.MAX_FIGHT then return "emergency" end
+
+        -- Manage prayer potions during fight
+        if Config.CAMP_BOSS then
+            local prayerStatus = Utils:managePrayer()
+            if prayerStatus == "emergency" then
+                return "no_prayer"
+            end
+        end
 
         -- Handle mechanics first (highest priority)
         if Mechanics:handleMechanics() then
@@ -479,7 +571,7 @@ function Boss:fight()
 
                 API.RandomSleep2(4000, 800, 1200)
                 self:loot()
-                return true
+                return "kill"
             end
 
             if boss and not hasAttacked then
@@ -494,7 +586,17 @@ function Boss:fight()
         API.RandomSleep2(600, 100, 200)
     end
 
-    return false
+    return "emergency"
+end
+
+function Boss:returnViaPortal()
+    if not API.Read_LoopyLoop() then return false end
+    Stats.currentState = "Returning"
+
+    API.DoAction_Object1(0x29, API.OFF_ACT_GeneralObject_route0, {Config.RETURN_PORTAL}, 50)
+    API.RandomSleep2(3000, 1000, 1500)
+
+    return true
 end
 
 
@@ -522,6 +624,7 @@ local function applyGUIConfig()
     local cfg = GUI.getConfig()
     Config.START_AT_WARS = cfg.startAtWars
     Config.TELEPORT_BETWEEN_KILLS = cfg.teleportBetweenKills
+    Config.CAMP_BOSS = cfg.campBoss
 end
 
 local function startLiveGUI()
@@ -532,7 +635,21 @@ local function startLiveGUI()
     end)
 end
 
-local function runKillCycle()
+local function handleFightFailure(result)
+    Stats.deaths = Stats.deaths + 1
+    Stats.killStartTime = 0
+
+    if result == "no_prayer" then
+        GUI.addWarning("Out of prayer potions, teleporting to bank")
+    else
+        GUI.addWarning("Fight failed, teleporting back")
+    end
+
+    WarsRetreat:teleport()
+    API.RandomSleep2(0, 1200, 1800)
+end
+
+local function runBankCycle()
     if not WarsRetreat:bank() then
         GUI.addWarning("Failed to bank")
         API.RandomSleep2(0, 1000, 2000)
@@ -556,17 +673,73 @@ local function runKillCycle()
 
     Boss:navigate()
 
-    if not Boss:fight() then
-        Stats.deaths = Stats.deaths + 1
-        Stats.killStartTime = 0
-        GUI.addWarning("Fight failed, teleporting back")
-        WarsRetreat:teleport()
-        API.RandomSleep2(0, 1200, 1800)
+    local result = Boss:fight()
+    if result ~= "kill" then
+        handleFightFailure(result)
         return
     end
 
     WarsRetreat:teleport()
     API.RandomSleep2(0, 1200, 1800)
+end
+
+local function runCampCycle()
+    -- Initial entry: bank, enter instance
+    if not WarsRetreat:bank() then
+        GUI.addWarning("Failed to bank")
+        API.RandomSleep2(0, 1000, 2000)
+        return
+    end
+
+    WarsRetreat:altar()
+    WarsRetreat:adrenalineCrystal()
+
+    if not WarsRetreat:enterPortal() then
+        GUI.addWarning("Failed to enter portal")
+        API.RandomSleep2(0, 600, 1200)
+        return
+    end
+
+    if not Boss:enterInstance() then
+        GUI.addWarning("Failed to enter instance")
+        API.RandomSleep2(0, 600, 800)
+        return
+    end
+
+    Boss:navigate()
+
+    -- Camp loop: fight -> loot -> portal -> ledge -> fight again
+    while API.Read_LoopyLoop() and not GUI.isStopped() do
+        while GUI.isPaused() and API.Read_LoopyLoop() do
+            API.RandomSleep2(200, 50, 100)
+        end
+
+        local result = Boss:fight()
+        if result ~= "kill" then
+            handleFightFailure(result)
+            return
+        end
+
+        -- After looting, use return portal to go back to ledge area
+        if not Boss:returnViaPortal() then
+            GUI.addWarning("Failed to use return portal, teleporting out")
+            WarsRetreat:teleport()
+            API.RandomSleep2(0, 1200, 1800)
+            return
+        end
+
+        -- Click ledge to re-enter the fight area
+        hasAttacked = false
+        Boss:navigate()
+    end
+end
+
+local function runKillCycle()
+    if Config.CAMP_BOSS then
+        runCampCycle()
+    else
+        runBankCycle()
+    end
 end
 
 

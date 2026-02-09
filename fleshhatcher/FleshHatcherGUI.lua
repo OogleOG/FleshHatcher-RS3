@@ -27,6 +27,7 @@ FleshHatcherGUI.selectWarningsTab = false
 FleshHatcherGUI.config = {
     startAtWars = true,
     teleportBetweenKills = false,
+    campBoss = false,
 }
 
 ------------------------------------------
@@ -50,6 +51,8 @@ local STATE_COLORS = {
     ["Fighting"]          = { 1.0, 0.4, 0.3 },
     ["Looting"]           = { 0.9, 0.75, 0.3 },
     ["Teleporting"]       = { 0.6, 0.9, 1.0 },
+    ["Returning"]         = { 0.5, 0.8, 0.6 },
+    ["Drinking Prayer"]   = { 0.3, 0.6, 0.9 },
     ["Dead"]              = { 0.5, 0.5, 0.5 },
     ["Idle"]              = { 0.7, 0.7, 0.7 },
     ["Paused"]            = { 1.0, 0.8, 0.2 },
@@ -78,6 +81,7 @@ local function saveConfigToFile(cfg)
     local data = {
         StartAtWars = cfg.startAtWars,
         TeleportBetweenKills = cfg.teleportBetweenKills,
+        CampBoss = cfg.campBoss,
     }
     local ok, json = pcall(API.JsonEncode, data)
     if not ok or not json then
@@ -118,6 +122,7 @@ function FleshHatcherGUI.loadConfig()
     local c = FleshHatcherGUI.config
     if type(saved.StartAtWars) == "boolean" then c.startAtWars = saved.StartAtWars end
     if type(saved.TeleportBetweenKills) == "boolean" then c.teleportBetweenKills = saved.TeleportBetweenKills end
+    if type(saved.CampBoss) == "boolean" then c.campBoss = saved.CampBoss end
 end
 
 function FleshHatcherGUI.getConfig()
@@ -125,6 +130,7 @@ function FleshHatcherGUI.getConfig()
     return {
         startAtWars = c.startAtWars,
         teleportBetweenKills = c.teleportBetweenKills,
+        campBoss = c.campBoss,
     }
 end
 
@@ -226,6 +232,7 @@ local function drawConfigTab(cfg, gui)
             ImGui.TableSetupColumn("val", ImGuiTableColumnFlags.WidthStretch, 0.6)
             row("Start at War's", cfg.startAtWars and "Yes" or "No")
             row("Teleport Between", cfg.teleportBetweenKills and "Yes" or "No")
+            row("Camp Boss", cfg.campBoss and "Yes" or "No")
             ImGui.EndTable()
         end
 
@@ -278,6 +285,9 @@ local function drawConfigTab(cfg, gui)
 
     local teleChanged, teleVal = ImGui.Checkbox("Teleport Between Kills##telebetween", cfg.teleportBetweenKills)
     if teleChanged then cfg.teleportBetweenKills = teleVal end
+
+    local campChanged, campVal = ImGui.Checkbox("Camp Boss (don't bank between kills)##campboss", cfg.campBoss)
+    if campChanged then cfg.campBoss = campVal end
 
     ImGui.PopItemWidth()
 
